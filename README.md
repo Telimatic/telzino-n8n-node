@@ -1,4 +1,4 @@
-# n8n-nodes-telzino
+# n8n-nodes-telzino-ai
 
 This is an [n8n](https://n8n.io) community node package for the
 [Telzino](https://docs.telzino.com) AI voice agent platform.
@@ -19,7 +19,7 @@ n8n **Webhook** trigger node — no dedicated trigger node is required.
 
 Follow the
 [community node installation guide](https://docs.n8n.io/integrations/community-nodes/installation/)
-and use the package name `n8n-nodes-telzino`.
+and use the package name `n8n-nodes-telzino-ai`.
 
 ## Credentials
 
