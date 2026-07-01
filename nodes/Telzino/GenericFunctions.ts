@@ -16,92 +16,18 @@ type TelzinoRequestFunctions =
 	| IHookFunctions
 	| IWebhookFunctions;
 
-/**
- * In-memory access-token cache, keyed by client ID + base URL. The module stays
- * loaded for the life of the n8n process, so tokens are reused across executions
- * until shortly before they expire.
- */
-const tokenCache = new Map<string, { token: string; expiresAt: number }>();
-
 function normaliseBaseUrl(baseUrl?: string): string {
-	return (baseUrl || 'https://api.telzino.com').replace(/\/$/, '');
+	return (baseUrl || 'https://api.telzino.com').replace(/\/+$/, '');
 }
 
 /**
- * Decode the `exp` claim (seconds since epoch) from a JWT without verifying it.
- * Returns undefined if the token is not a decodable JWT.
- */
-function getJwtExpMs(token: string): number | undefined {
-	const parts = token.split('.');
-	if (parts.length < 2) return undefined;
-	try {
-		// Node's Buffer is available at runtime; cast avoids requiring @types/node.
-		const BufferCtor = (globalThis as { Buffer?: { from(s: string, e: string): { toString(e: string): string } } })
-			.Buffer;
-		if (!BufferCtor) return undefined;
-		const json = BufferCtor.from(parts[1], 'base64url').toString('utf8');
-		const payload = JSON.parse(json) as { exp?: number };
-		return typeof payload.exp === 'number' ? payload.exp * 1000 : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-/** Discard any cached token so the next request forces a fresh exchange. */
-function invalidateToken(credentials: IDataObject): void {
-	const baseUrl = normaliseBaseUrl(credentials.baseUrl as string);
-	tokenCache.delete(`${credentials.clientId}@${baseUrl}`);
-}
-
-/**
- * Exchange the client credentials for a Bearer access token via the Telzino
- * OAuth endpoint, caching the result until it is about to expire.
- */
-async function getAccessToken(
-	this: TelzinoRequestFunctions,
-	credentials: IDataObject,
-): Promise<string> {
-	const baseUrl = normaliseBaseUrl(credentials.baseUrl as string);
-	const audience = (credentials.audience as string) || `${baseUrl}/`;
-	const cacheKey = `${credentials.clientId}@${baseUrl}`;
-
-	const cached = tokenCache.get(cacheKey);
-	if (cached && cached.expiresAt > Date.now() + 120_000) {
-		return cached.token;
-	}
-
-	const response = (await this.helpers.httpRequest({
-		method: 'POST',
-		url: `${baseUrl}/oauth/token`,
-		headers: { 'Content-Type': 'application/json' },
-		body: {
-			client_id: credentials.clientId,
-			client_secret: credentials.clientSecret,
-			audience,
-			grant_type: 'client_credentials',
-		},
-		json: true,
-	})) as { access_token: string; expires_in?: number };
-
-	const token = response.access_token;
-
-	// The Telzino /oauth/token endpoint can hand back a shared token that is
-	// already partway through its life while still reporting the full
-	// `expires_in` (e.g. 86400). Trusting `expires_in` + the local clock would
-	// then cache the token well past its real expiry and produce
-	// ERR_JWT_EXPIRED. The token's own `exp` claim is authoritative, so prefer
-	// it and only fall back to `expires_in` when the token is not a JWT.
-	const ttlExpiresAt = Date.now() + (response.expires_in ?? 86_400) * 1000;
-	const jwtExpiresAt = getJwtExpMs(token);
-	const expiresAt = jwtExpiresAt ? Math.min(jwtExpiresAt, ttlExpiresAt) : ttlExpiresAt;
-	tokenCache.set(cacheKey, { token, expiresAt });
-
-	return token;
-}
-
-/**
- * Make an authenticated request to the Telzino API. Fetches (or reuses) an OAuth
- * token and attaches it as a Bearer header.
+ * Make an authenticated request to the Telzino API.
+ *
+ * Authentication — the OAuth client-credentials token exchange and the Bearer
+ * header — lives in the telzinoApi credential (preAuthentication + authenticate).
+ * Using httpRequestWithAuthentication means n8n attaches the token, caches it,
+ * and transparently re-runs preAuthentication on a 401, so an expired token is
+ * refreshed instead of being reused.
  */
 export async function telzinoApiRequest(
 	this: TelzinoRequestFunctions,
@@ -109,49 +35,33 @@ export async function telzinoApiRequest(
 	endpoint: string,
 	body: IDataObject = {},
 	qs: IDataObject = {},
-): Promise<any> {
-	const credentials = (await this.getCredentials('telzinoApi')) as IDataObject;
+): Promise<IDataObject> {
+	const credentials = await this.getCredentials('telzinoApi');
 	const baseUrl = normaliseBaseUrl(credentials.baseUrl as string);
 
-	const buildOptions = (token: string): IHttpRequestOptions => {
-		const options: IHttpRequestOptions = {
-			method,
-			url: `${baseUrl}${endpoint}`,
-			headers: { Authorization: `Bearer ${token}` },
-			body,
-			qs,
-			json: true,
-		};
-
-		if (Object.keys(body).length === 0) {
-			delete options.body;
-		}
-
-		if (Object.keys(qs).length === 0) {
-			delete options.qs;
-		}
-
-		return options;
+	const options: IHttpRequestOptions = {
+		method,
+		url: `${baseUrl}${endpoint}`,
+		body,
+		qs,
+		json: true,
 	};
 
+	if (Object.keys(body).length === 0) {
+		delete options.body;
+	}
+
+	if (Object.keys(qs).length === 0) {
+		delete options.qs;
+	}
+
 	try {
-		const token = await getAccessToken.call(this, credentials);
-		return await this.helpers.httpRequest(buildOptions(token));
+		return (await this.helpers.httpRequestWithAuthentication.call(
+			this,
+			'telzinoApi',
+			options,
+		)) as IDataObject;
 	} catch (error) {
-		// A cached token can still be rejected as expired if the upstream OAuth
-		// proxy handed back a shorter-lived token than advertised. Drop the
-		// cache and retry once with a freshly minted token before failing.
-		const statusCode = (error as { httpCode?: string; statusCode?: number }).statusCode;
-		const httpCode = (error as { httpCode?: string }).httpCode;
-		if (statusCode === 401 || httpCode === '401') {
-			invalidateToken(credentials);
-			try {
-				const token = await getAccessToken.call(this, credentials);
-				return await this.helpers.httpRequest(buildOptions(token));
-			} catch (retryError) {
-				throw new NodeApiError(this.getNode(), retryError as JsonObject);
-			}
-		}
 		throw new NodeApiError(this.getNode(), error as JsonObject);
 	}
 }

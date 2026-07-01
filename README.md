@@ -3,8 +3,12 @@
 This is an [n8n](https://n8n.io) community node package for the
 [Telzino](https://docs.telzino.com) AI voice agent platform.
 
-It lets you trigger n8n workflows from Telzino call events and place outbound AI
-voice calls directly from your workflows.
+It lets you place outbound AI voice calls and list Telzino resellers,
+organizations, and agents directly from your workflows.
+
+To react to Telzino call events, point a Telzino agent webhook (Agent Settings
+&rarr; Functions &rarr; Webhooks), or the outbound call's **Callback URL**, at an
+n8n **Webhook** trigger node — no dedicated trigger node is required.
 
 [Installation](#installation) ·
 [Credentials](#credentials) ·
@@ -30,8 +34,7 @@ Use **Test Connection** to verify the credential against the Telzino API.
 ## Nodes
 
 - **Telzino** (action) — list resellers, organizations, and agents, and place
-  outbound calls.
-- **Telzino Trigger** — start a workflow when Telzino sends a call event webhook.
+  outbound AI voice calls.
 
 ## Resources
 
@@ -40,4 +43,4 @@ Use **Test Connection** to verify the credential against the Telzino API.
 
 ## License
 
-[MIT](https://github.com/telzino/n8n-nodes-telzino/blob/master/LICENSE.md)
+[MIT](https://github.com/devplusopsllc/telimatic-n8n-node/blob/main/LICENSE.md)

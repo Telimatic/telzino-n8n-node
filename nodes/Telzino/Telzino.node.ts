@@ -1,16 +1,16 @@
 import {
+	NodeApiError,
+	NodeConnectionTypes,
 	NodeOperationError,
 	jsonParse,
-	type ICredentialsDecrypted,
-	type ICredentialTestFunctions,
 	type IDataObject,
 	type IExecuteFunctions,
 	type ILoadOptionsFunctions,
-	type INodeCredentialTestResult,
 	type INodeExecutionData,
 	type INodePropertyOptions,
 	type INodeType,
 	type INodeTypeDescription,
+	type JsonObject,
 } from 'n8n-workflow';
 
 import {
@@ -23,7 +23,7 @@ export class Telzino implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Telzino',
 		name: 'telzino',
-		icon: 'file:telzino.png',
+		icon: { light: 'file:icons/telzino.svg', dark: 'file:icons/telzino.dark.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
@@ -31,13 +31,12 @@ export class Telzino implements INodeType {
 		defaults: {
 			name: 'Telzino',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'telzinoApi',
 				required: true,
-				testedBy: 'telzinoApiTest',
 			},
 		],
 		properties: [
@@ -262,6 +261,7 @@ export class Telzino implements INodeType {
 				description: 'The ID of the outbound call to retrieve (the ID returned by Create)',
 			},
 		],
+		usableAsTool: true,
 	};
 
 	methods = {
@@ -311,49 +311,6 @@ export class Telzino implements INodeType {
 					name: (agent.name as string) || (agent.id as string),
 					value: agent.id as string,
 				}));
-			},
-		},
-
-		credentialTest: {
-			async telzinoApiTest(
-				this: ICredentialTestFunctions,
-				credential: ICredentialsDecrypted,
-			): Promise<INodeCredentialTestResult> {
-				const creds = (credential.data ?? {}) as IDataObject;
-				const baseUrl = ((creds.baseUrl as string) || 'https://api.telzino.com').replace(/\/$/, '');
-				const audience = (creds.audience as string) || `${baseUrl}/`;
-
-				try {
-					const tokenResponse = (await this.helpers.request({
-						method: 'POST',
-						uri: `${baseUrl}/oauth/token`,
-						body: {
-							client_id: creds.clientId,
-							client_secret: creds.clientSecret,
-							audience,
-							grant_type: 'client_credentials',
-						},
-						json: true,
-					})) as { access_token?: string };
-
-					if (!tokenResponse.access_token) {
-						return { status: 'Error', message: 'No access token returned by Telzino.' };
-					}
-
-					await this.helpers.request({
-						method: 'GET',
-						uri: `${baseUrl}/v1/me`,
-						headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-						json: true,
-					});
-
-					return { status: 'OK', message: 'Connection successful!' };
-				} catch (error) {
-					return {
-						status: 'Error',
-						message: `Connection failed: ${(error as Error).message}`,
-					};
-				}
 			},
 		},
 	};
@@ -454,7 +411,7 @@ export class Telzino implements INodeType {
 					});
 					continue;
 				}
-				throw error;
+				throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
 			}
 		}
 

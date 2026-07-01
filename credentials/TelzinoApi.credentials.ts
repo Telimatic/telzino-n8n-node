@@ -1,4 +1,11 @@
-import type { ICredentialType, INodeProperties } from 'n8n-workflow';
+import type {
+	IAuthenticateGeneric,
+	ICredentialDataDecryptedObject,
+	ICredentialTestRequest,
+	ICredentialType,
+	IHttpRequestHelper,
+	INodeProperties,
+} from 'n8n-workflow';
 
 export class TelzinoApi implements ICredentialType {
 	name = 'telzinoApi';
@@ -7,10 +14,8 @@ export class TelzinoApi implements ICredentialType {
 
 	documentationUrl = 'https://docs.telzino.com/api-reference/authentication';
 
-	// The OAuth client-credentials token exchange and Bearer header are handled
-	// in code (nodes/Telzino/GenericFunctions.ts) rather than via n8n's generic
-	// authenticate/preAuthentication, so the token is reliably attached on every
-	// request. Connection testing is done by the node's `telzinoApiTest` method.
+	icon = { light: 'file:icons/telzino.svg', dark: 'file:icons/telzino.dark.svg' } as const;
+
 	properties: INodeProperties[] = [
 		{
 			displayName: 'Client ID',
@@ -51,5 +56,56 @@ export class TelzinoApi implements ICredentialType {
 			default: 'https://api.telzino.com/',
 			description: 'OAuth audience sent during the token exchange',
 		},
+		// Populated by preAuthentication() below; not shown to the user.
+		{
+			displayName: 'Session Token',
+			name: 'sessionToken',
+			type: 'hidden',
+			typeOptions: { password: true },
+			default: '',
+		},
 	];
+
+	// Exchange the client credentials for a Bearer token before requests run.
+	// n8n caches the returned sessionToken and re-invokes this method when a
+	// request comes back 401, so tokens refresh automatically and expired
+	// tokens are never reused.
+	async preAuthentication(this: IHttpRequestHelper, credentials: ICredentialDataDecryptedObject) {
+		const baseUrl = ((credentials.baseUrl as string) || 'https://api.telzino.com').replace(
+			/\/+$/,
+			'',
+		);
+		const audience = (credentials.audience as string) || `${baseUrl}/`;
+
+		const response = (await this.helpers.httpRequest({
+			method: 'POST',
+			url: `${baseUrl}/oauth/token`,
+			headers: { 'Content-Type': 'application/json' },
+			body: {
+				client_id: credentials.clientId,
+				client_secret: credentials.clientSecret,
+				audience,
+				grant_type: 'client_credentials',
+			},
+			json: true,
+		})) as { access_token: string };
+
+		return { sessionToken: response.access_token };
+	}
+
+	authenticate: IAuthenticateGeneric = {
+		type: 'generic',
+		properties: {
+			headers: {
+				Authorization: '=Bearer {{$credentials.sessionToken}}',
+			},
+		},
+	};
+
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL: "={{ ($credentials.baseUrl || 'https://api.telzino.com').replace(/\\/+$/, '') }}",
+			url: '/v1/me',
+		},
+	};
 }
