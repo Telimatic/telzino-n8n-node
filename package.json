@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-telzino-ai",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "n8n community node for the Telzino AI voice agent platform: trigger workflows from call events and place outbound AI voice calls.",
 	"keywords": [
 		"n8n-community-node-package",
@@ -18,7 +18,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/devplusopsllc/telimatic-n8n-node.git"
+		"url": "git+https://github.com/Telimatic/telzino-n8n-node.git"
 	},
 	"engines": {
 		"node": ">=20.15"
