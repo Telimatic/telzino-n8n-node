@@ -43,4 +43,4 @@ Use **Test Connection** to verify the credential against the Telzino API.
 
 ## License
 
-[MIT](https://github.com/devplusopsllc/telimatic-n8n-node/blob/main/LICENSE.md)
+[MIT](https://github.com/Telimatic/telzino-n8n-node/blob/main/LICENSE.md)
