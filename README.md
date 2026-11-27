@@ -36,6 +36,15 @@ Use **Test Connection** to verify the credential against the Telzino API.
 - **Telzino** (action) — list resellers, organizations, and agents, and place
   outbound AI voice calls.
 
+### Consent basis for outbound calls
+
+Telzino requires every outbound call to state the legal basis it is placed
+under, unless the agent has `require_consent_basis` turned off. Set **Consent
+Basis** on the **Call → Create** operation; without it, agents that require one
+refuse the call with `400 consent_required`. Add a **Consent Reference** under
+Additional Fields to record where the consent is stored. See
+[Outbound Compliance](https://docs.telzino.com/functions/outbound-compliance#consent-basis).
+
 ## Resources
 
 - [Telzino API reference](https://docs.telzino.com/api-reference/overview)

@@ -203,6 +203,42 @@ export class Telzino implements INodeType {
 				description: 'Destination number in E.164 format',
 			},
 			{
+				displayName: 'Consent Basis',
+				name: 'consentBasis',
+				type: 'options',
+				// No pre-selected basis: it is a legal statement the user must make themselves.
+				options: [
+					{
+						name: 'Established Business Relationship',
+						value: 'ebr',
+					},
+					{
+						name: 'Express Written Consent',
+						value: 'express_written',
+						description: 'The callee gave express written consent',
+					},
+					{
+						name: 'Informational (Exempt)',
+						value: 'informational_exempt',
+						description:
+							'Purely informational calls exempt from consent rules, such as appointment reminders',
+					},
+					{
+						name: 'None (Only for Agents That Do Not Require It)',
+						value: '',
+					},
+					{
+						name: 'Other',
+						value: 'other',
+						description: 'Anything else. Pair it with a Consent Reference.',
+					},
+				],
+				default: '',
+				displayOptions: { show: { resource: ['call'], operation: ['create'] } },
+				description:
+					'The legal basis this call is placed under. Telzino refuses the call when the agent requires one and none is set, which is the default for new agents.',
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'additionalFields',
 				type: 'collection',
@@ -227,6 +263,15 @@ export class Telzino implements INodeType {
 						placeholder: 'https://example.com/webhook',
 						description:
 							'HTTPS URL that receives the result webhook when the call reaches a terminal state',
+					},
+					{
+						displayName: 'Consent Reference',
+						name: 'consent_reference',
+						type: 'string',
+						default: '',
+						placeholder: 'crm-123',
+						description:
+							'Where the consent is recorded, such as a CRM ID or form submission ID (max 200 characters). Stored for the audit export.',
 					},
 					{
 						displayName: 'Metadata',
@@ -362,6 +407,15 @@ export class Telzino implements INodeType {
 					const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 
 					const body: IDataObject = { to_number: toNumber };
+
+					// Default '' keeps workflows saved before this field existed sending no basis.
+					const consentBasis = this.getNodeParameter('consentBasis', i, '') as string;
+					if (consentBasis) {
+						body.consent_basis = consentBasis;
+					}
+					if (additionalFields.consent_reference) {
+						body.consent_reference = additionalFields.consent_reference;
+					}
 
 					if (additionalFields.call_context) {
 						body.call_context = additionalFields.call_context;
