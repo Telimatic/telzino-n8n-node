@@ -23,11 +23,9 @@ function normaliseBaseUrl(baseUrl?: string): string {
 /**
  * Make an authenticated request to the Telzino API.
  *
- * Authentication — the OAuth client-credentials token exchange and the Bearer
- * header — lives in the telzinoApi credential (preAuthentication + authenticate).
- * Using httpRequestWithAuthentication means n8n attaches the token, caches it,
- * and transparently re-runs preAuthentication on a 401, so an expired token is
- * refreshed instead of being reused.
+ * The telzinoOAuth2Api credential extends n8n's built-in oAuth2Api, so
+ * httpRequestWithAuthentication does the client-credentials token exchange,
+ * attaches the Bearer token, and fetches a new one when a request returns 401.
  */
 export async function telzinoApiRequest(
 	this: TelzinoRequestFunctions,
@@ -36,7 +34,7 @@ export async function telzinoApiRequest(
 	body: IDataObject = {},
 	qs: IDataObject = {},
 ): Promise<IDataObject> {
-	const credentials = await this.getCredentials('telzinoApi');
+	const credentials = await this.getCredentials('telzinoOAuth2Api');
 	const baseUrl = normaliseBaseUrl(credentials.baseUrl as string);
 
 	const options: IHttpRequestOptions = {
@@ -58,7 +56,7 @@ export async function telzinoApiRequest(
 	try {
 		return (await this.helpers.httpRequestWithAuthentication.call(
 			this,
-			'telzinoApi',
+			'telzinoOAuth2Api',
 			options,
 		)) as IDataObject;
 	} catch (error) {
@@ -101,7 +99,7 @@ export async function telzinoApiRequestAllItems(
 export async function getAccountId(
 	this: IExecuteFunctions | ILoadOptionsFunctions,
 ): Promise<string> {
-	const credentials = await this.getCredentials('telzinoApi');
+	const credentials = await this.getCredentials('telzinoOAuth2Api');
 	if (credentials.accountId) {
 		return credentials.accountId as string;
 	}
