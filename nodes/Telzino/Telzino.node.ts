@@ -2,7 +2,6 @@ import {
 	NodeApiError,
 	NodeConnectionTypes,
 	NodeOperationError,
-	jsonParse,
 	type IDataObject,
 	type IExecuteFunctions,
 	type ILoadOptionsFunctions,
@@ -14,7 +13,9 @@ import {
 } from 'n8n-workflow';
 
 import {
+	emptyIfOutOfScope,
 	getAccountId,
+	parseJsonField,
 	telzinoApiRequest,
 	telzinoApiRequestAllItems,
 } from './GenericFunctions';
@@ -158,11 +159,10 @@ export class Telzino implements INodeType {
 				name: 'reseller',
 				type: 'options',
 				typeOptions: { loadOptionsMethod: 'getResellers' },
-				required: true,
 				default: '',
 				displayOptions: { show: { resource: ['call'], operation: ['create'] } },
 				description:
-					'Pick a reseller to filter the organizations below. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					'Optional filter for the organizations below. Leave empty when your API key is limited to one reseller, organization or agent. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Organization Name or ID',
@@ -172,11 +172,10 @@ export class Telzino implements INodeType {
 					loadOptionsMethod: 'getOrganizations',
 					loadOptionsDependsOn: ['reseller'],
 				},
-				required: true,
 				default: '',
 				displayOptions: { show: { resource: ['call'], operation: ['create'] } },
 				description:
-					'Pick an organization from the selected reseller to filter the agents below. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					'Optional filter for the agents below, from the selected reseller. Leave empty to list every agent your API key can reach. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Agent Name or ID',
@@ -190,7 +189,7 @@ export class Telzino implements INodeType {
 				default: '',
 				displayOptions: { show: { resource: ['call'], operation: ['create'] } },
 				description:
-					'The agent that places the call, from the selected organization. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					'The agent that places the call. With a key limited to one agent the list cannot load, so enter the agent ID as an expression. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'To Number',
@@ -247,6 +246,14 @@ export class Telzino implements INodeType {
 				displayOptions: { show: { resource: ['call'], operation: ['create'] } },
 				options: [
 					{
+						displayName: 'AMD Config',
+						name: 'amd_config',
+						type: 'json',
+						default: '{}',
+						description:
+							'Answering Machine Detection settings for this call, merged over the agent settings. For example {"enabled": true}.',
+					},
+					{
 						displayName: 'Call Context',
 						name: 'call_context',
 						type: 'string',
@@ -265,6 +272,15 @@ export class Telzino implements INodeType {
 							'HTTPS URL that receives the result webhook when the call reaches a terminal state',
 					},
 					{
+						displayName: 'Callee Timezone',
+						name: 'callee_timezone',
+						type: 'string',
+						default: '',
+						placeholder: 'America/Denver',
+						description:
+							'IANA timezone of the callee, overriding the area-code lookup when checking the agent calling hours',
+					},
+					{
 						displayName: 'Consent Reference',
 						name: 'consent_reference',
 						type: 'string',
@@ -274,12 +290,51 @@ export class Telzino implements INodeType {
 							'Where the consent is recorded, such as a CRM ID or form submission ID (max 200 characters). Stored for the audit export.',
 					},
 					{
+						displayName: 'Greeting',
+						name: 'greeting',
+						type: 'string',
+						default: '',
+						description:
+							'Exact opening line the agent speaks when the callee answers (max 1000 characters). Overrides the agent Outbound Greeting.',
+					},
+					{
+						displayName: 'IVR Map',
+						name: 'ivr_map',
+						type: 'json',
+						default: '[]',
+						description:
+							'Scripted phone-menu steps for this call, such as [{"wait_for": "press 1", "send_dtmf": "1"}]. Needs Answering Machine Detection on for the call.',
+					},
+					{
+						displayName: 'IVR Navigation',
+						name: 'ivr_navigation',
+						type: 'json',
+						default: '{}',
+						description:
+							'IVR menu navigation settings for this call, merged over the agent settings. Needs Answering Machine Detection on for the call.',
+					},
+					{
 						displayName: 'Metadata',
 						name: 'metadata',
 						type: 'json',
 						default: '{}',
 						description:
 							'Opaque JSON object (max 16KB) stored with the call and echoed back in the result webhook',
+					},
+					{
+						displayName: 'Retry Policy ID',
+						name: 'retry_policy_id',
+						type: 'string',
+						default: '',
+						description: 'Retry policy to use for this call instead of the agent default',
+					},
+					{
+						displayName: 'Voicemail Message',
+						name: 'voicemail_message',
+						type: 'string',
+						typeOptions: { rows: 3 },
+						default: '',
+						description: 'Message to leave if the call reaches a voicemail box, for this call only',
 					},
 				],
 			},
@@ -312,13 +367,15 @@ export class Telzino implements INodeType {
 	methods = {
 		loadOptions: {
 			async getResellers(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const accountId = await getAccountId.call(this);
-				const response = await telzinoApiRequest.call(
-					this,
-					'GET',
-					`/v1/accounts/${accountId}/resellers`,
-				);
-				const data = (response.data as IDataObject[]) ?? [];
+				const data = await emptyIfOutOfScope(async () => {
+					const accountId = await getAccountId.call(this);
+					const response = await telzinoApiRequest.call(
+						this,
+						'GET',
+						`/v1/accounts/${accountId}/resellers`,
+					);
+					return (response.data as IDataObject[]) ?? [];
+				});
 				return data.map((reseller) => ({
 					name:
 						(reseller.name as string) ||
@@ -333,12 +390,14 @@ export class Telzino implements INodeType {
 				if (!resellerId) {
 					return [];
 				}
-				const response = await telzinoApiRequest.call(
-					this,
-					'GET',
-					`/v1/resellers/${resellerId}/organizations`,
-				);
-				const data = (response.data as IDataObject[]) ?? [];
+				const data = await emptyIfOutOfScope(async () => {
+					const response = await telzinoApiRequest.call(
+						this,
+						'GET',
+						`/v1/resellers/${resellerId}/organizations`,
+					);
+					return (response.data as IDataObject[]) ?? [];
+				});
 				return data.map((org) => ({
 					name: (org.name as string) || (org.external_id as string) || (org.id as string),
 					value: org.id as string,
@@ -413,21 +472,26 @@ export class Telzino implements INodeType {
 					if (consentBasis) {
 						body.consent_basis = consentBasis;
 					}
-					if (additionalFields.consent_reference) {
-						body.consent_reference = additionalFields.consent_reference;
-					}
 
-					if (additionalFields.call_context) {
-						body.call_context = additionalFields.call_context;
+					for (const field of [
+						'call_context',
+						'callback_url',
+						'callee_timezone',
+						'consent_reference',
+						'greeting',
+						'retry_policy_id',
+						'voicemail_message',
+					]) {
+						if (additionalFields[field]) {
+							body[field] = additionalFields[field];
+						}
 					}
-					if (additionalFields.callback_url) {
-						body.callback_url = additionalFields.callback_url;
-					}
-					if (additionalFields.metadata) {
-						body.metadata =
-							typeof additionalFields.metadata === 'string'
-								? jsonParse(additionalFields.metadata as string)
-								: additionalFields.metadata;
+					// Empty objects are not sent: an empty ivr_navigation alone is refused by the API.
+					for (const field of ['amd_config', 'ivr_map', 'ivr_navigation', 'metadata']) {
+						const parsed = parseJsonField(additionalFields[field]);
+						if (parsed) {
+							body[field] = parsed;
+						}
 					}
 
 					responseData = await telzinoApiRequest.call(

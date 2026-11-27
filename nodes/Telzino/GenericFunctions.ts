@@ -8,7 +8,7 @@ import type {
 	IWebhookFunctions,
 	JsonObject,
 } from 'n8n-workflow';
-import { NodeApiError } from 'n8n-workflow';
+import { NodeApiError, jsonParse } from 'n8n-workflow';
 
 type TelzinoRequestFunctions =
 	| IExecuteFunctions
@@ -108,4 +108,33 @@ export async function getAccountId(
 
 	const me = await telzinoApiRequest.call(this, 'GET', '/v1/me');
 	return me.account_id as string;
+}
+
+/**
+ * Run a picker lookup, returning an empty list when the API key's scope does not
+ * allow it (403). Reseller, organization and agent-scoped keys cannot list
+ * resellers or organizations, and that must not break the pickers.
+ */
+export async function emptyIfOutOfScope(
+	lookup: () => Promise<IDataObject[]>,
+): Promise<IDataObject[]> {
+	return await lookup().catch((error: NodeApiError) => {
+		if (String(error.httpCode) === '403') {
+			return [];
+		}
+		// Already a NodeApiError from telzinoApiRequest.
+		return Promise.reject(error);
+	});
+}
+
+/** Parse a JSON node parameter; undefined when it is empty ({} or []), so it is not sent. */
+export function parseJsonField(value: unknown): IDataObject | IDataObject[] | undefined {
+	const parsed = (typeof value === 'string' ? jsonParse(value) : value) as
+		| IDataObject
+		| IDataObject[]
+		| undefined;
+	if (!parsed || Object.keys(parsed).length === 0) {
+		return undefined;
+	}
+	return parsed;
 }
