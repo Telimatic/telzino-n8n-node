@@ -78,7 +78,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: '24' # pinned: isolated-vm (via @n8n/node-cli) fails to build on Node 26
           cache: 'npm'
 
       - name: Install dependencies
