@@ -36,7 +36,7 @@ export class Telzino implements INodeType {
 		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
-				name: 'telzinoApi',
+				name: 'telzinoOAuth2Api',
 				required: true,
 			},
 		],

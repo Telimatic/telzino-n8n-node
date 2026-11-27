@@ -23,19 +23,24 @@ and use the package name `n8n-nodes-telzino-ai`.
 
 > **Install `n8n-nodes-telzino-ai`, not `n8n-nodes-telzino`.** The similarly
 > named `n8n-nodes-telzino` package is an older, unverified package from another
-> author. It is not maintained by Telzino, calls an outdated endpoint, and
-> registers a credential with the same name as this one, so the two conflict.
-> If it is installed, uninstall it before installing this package.
+> author. It is not maintained by Telzino and calls an outdated endpoint. If it
+> is installed, uninstall it before installing this package.
 
 ## Credentials
 
-The **Telzino API** credential authenticates with Telzino using OAuth 2.0
-client credentials. You will need:
+The **Telzino OAuth2 API** credential uses n8n's built-in OAuth 2.0 client
+credentials flow. You will need:
 
-- **Client ID** and **Client Secret** from your Telzino dashboard.
+- **Client ID** and **Client Secret** from your Telzino dashboard
+  (Account Settings → API Keys).
 - (Optional) **Account ID** — auto-resolved via `GET /v1/me` when left blank.
 
-Use **Test Connection** to verify the credential against the Telzino API.
+n8n fetches an access token when the credential is saved and renews it when it
+expires.
+
+**Upgrading from 0.3.0 or earlier:** the credential type was renamed from
+**Telzino API** to **Telzino OAuth2 API**. Create a new credential with the same
+Client ID and Client Secret and select it on each Telzino node.
 
 ### Scoped API keys
 
@@ -44,9 +49,8 @@ leave **Reseller** and **Organization** empty: they are optional filters, and
 the **Agent** list shows every agent the key can reach.
 
 A key limited to **one agent** can place calls, but it cannot list agents and
-cannot call `GET /v1/me`, so **Test Connection** reports a failure and the
-**Agent** list does not load. Save the credential anyway and enter the agent ID
-as an expression.
+cannot call `GET /v1/me`, so the **Agent** list does not load. Enter the agent
+ID as an expression.
 
 ## Nodes
 

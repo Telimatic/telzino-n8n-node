@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-telzino-ai",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"description": "n8n community node for the Telzino AI voice agent platform: trigger workflows from call events and place outbound AI voice calls.",
 	"keywords": [
 		"n8n-community-node-package",
@@ -44,7 +44,7 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/TelzinoApi.credentials.js"
+			"dist/credentials/TelzinoOAuth2Api.credentials.js"
 		],
 		"nodes": [
 			"dist/nodes/Telzino/Telzino.node.js"
